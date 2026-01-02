@@ -1,0 +1,21 @@
+# Binaries
+go-mcp-gitlab
+go-mcp-gitlab.exe
+go-mcp-gitlab-*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
