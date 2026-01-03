@@ -1,0 +1,146 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Build for all platforms
+        run: |
+          mkdir -p dist
+
+          # Get version info
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+          LDFLAGS="-s -w -X github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/config.Version=${VERSION} -X github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/config.BuildTime=${BUILD_TIME} -X github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/config.GitCommit=${GIT_COMMIT}"
+
+          # Darwin (macOS) - build both architectures then create universal binary
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/go-mcp-gitlab-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/go-mcp-gitlab-darwin-arm64 .
+
+          # Create universal binary using lipo
+          lipo -create -output dist/go-mcp-gitlab-darwin-universal \
+            dist/go-mcp-gitlab-darwin-amd64 \
+            dist/go-mcp-gitlab-darwin-arm64
+
+          # Remove individual architecture binaries
+          rm dist/go-mcp-gitlab-darwin-amd64 dist/go-mcp-gitlab-darwin-arm64
+
+          # Linux
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/go-mcp-gitlab-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/go-mcp-gitlab-linux-arm64 .
+
+          # Windows
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/go-mcp-gitlab-windows-amd64.exe .
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          shasum -a 256 * > checksums.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: dist/
+
+      - name: Delete existing release
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: |
+            Automated build from main branch.
+
+            ## Downloads
+
+            | Platform | Architecture | File |
+            |----------|--------------|------|
+            | macOS | Universal (Intel + Apple Silicon) | go-mcp-gitlab-darwin-universal |
+            | Linux | x64 | go-mcp-gitlab-linux-amd64 |
+            | Linux | ARM64 | go-mcp-gitlab-linux-arm64 |
+            | Windows | x64 | go-mcp-gitlab-windows-amd64.exe |
+
+            ## Installation
+
+            ### macOS / Linux
+            ```bash
+            # Download and make executable
+            chmod +x go-mcp-gitlab-darwin-universal  # or linux variant
+
+            # Move to PATH
+            sudo mv go-mcp-gitlab-* /usr/local/bin/go-mcp-gitlab
+            ```
+
+            ### Windows
+            Download `go-mcp-gitlab-windows-amd64.exe` and add to your PATH.
+
+            ## Configuration
+
+            Set your GitLab token using one of these methods:
+            - Environment variable: `export GITLAB_TOKEN=glpat-xxxx`
+            - GitLab CLI: `glab auth login`
+            - Git credentials: Stored via git credential helper
+            - Netrc file: `~/.netrc`
+
+            ## Verification
+
+            Use the checksums.txt file to verify your download:
+            ```bash
+            shasum -a 256 -c checksums.txt
+            ```
+          draft: false
+          prerelease: false
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
