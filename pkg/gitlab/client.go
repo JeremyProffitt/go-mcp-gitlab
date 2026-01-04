@@ -11,11 +11,32 @@ import (
 	"time"
 )
 
+// HTTPRequestInfo contains HTTP request details for logging
+type HTTPRequestInfo struct {
+	Method  string
+	URL     string
+	Headers map[string]string
+	Body    string
+}
+
+// HTTPResponseInfo contains HTTP response details for logging
+type HTTPResponseInfo struct {
+	StatusCode int
+	Headers    map[string]string
+	Body       string
+}
+
 // Logger defines the interface for logging API calls.
 type Logger interface {
 	Access(method, endpoint string, statusCode int, duration time.Duration)
 	Debug(msg string, args ...any)
 	Error(msg string, args ...any)
+	// LogHTTPRequest logs detailed HTTP request information at DEBUG level
+	LogHTTPRequest(context string, req *HTTPRequestInfo, secrets ...string)
+	// LogHTTPResponse logs detailed HTTP response information at DEBUG level
+	LogHTTPResponse(context string, resp *HTTPResponseInfo, duration time.Duration, secrets ...string)
+	// LogHTTPError logs detailed HTTP error information
+	LogHTTPError(context string, req *HTTPRequestInfo, resp *HTTPResponseInfo, err error, secrets ...string)
 }
 
 // Client is an HTTP client wrapper for the GitLab API.
@@ -112,16 +133,33 @@ func (c *Client) GetText(endpoint string) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "text/plain")
 
+	// Log request at DEBUG level (token will be masked)
+	c.logger.LogHTTPRequest("api_request_text", &HTTPRequestInfo{
+		Method: http.MethodGet,
+		URL:    url,
+		Headers: map[string]string{
+			"Authorization": "Bearer " + c.token,
+			"Accept":        "text/plain",
+		},
+	}, c.token)
+
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.logger.LogHTTPError("http_request_text", &HTTPRequestInfo{
+			Method: http.MethodGet,
+			URL:    url,
+			Headers: map[string]string{
+				"Authorization": "Bearer " + c.token,
+				"Accept":        "text/plain",
+			},
+		}, nil, err, c.token)
 		c.logger.Error("request failed", "method", http.MethodGet, "endpoint", endpoint, "error", err)
 		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	duration := time.Since(start)
-	c.logger.Access(http.MethodGet, endpoint, resp.StatusCode, duration)
 
 	// Read the response body
 	respBody, err := io.ReadAll(resp.Body)
@@ -129,8 +167,23 @@ func (c *Client) GetText(endpoint string) (string, error) {
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	// Log response at DEBUG level (body summary for text content)
+	c.logger.LogHTTPResponse("api_response_text", &HTTPResponseInfo{
+		StatusCode: resp.StatusCode,
+		Body:       string(respBody),
+	}, duration, c.token)
+
+	c.logger.Access(http.MethodGet, endpoint, resp.StatusCode, duration)
+
 	// Check for errors
 	if resp.StatusCode >= 400 {
+		c.logger.LogHTTPError("api_error_text", &HTTPRequestInfo{
+			Method: http.MethodGet,
+			URL:    url,
+		}, &HTTPResponseInfo{
+			StatusCode: resp.StatusCode,
+			Body:       string(respBody),
+		}, nil, c.token)
 		return "", c.handleErrorResponse(resp.StatusCode, endpoint, respBody)
 	}
 
@@ -152,11 +205,13 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 
 	// Prepare the request body
 	var bodyReader io.Reader
+	var bodyStr string
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
+		bodyStr = string(jsonBody)
 		bodyReader = bytes.NewReader(jsonBody)
 	}
 
@@ -171,16 +226,36 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	// Log request at DEBUG level (token will be masked)
+	c.logger.LogHTTPRequest("api_request", &HTTPRequestInfo{
+		Method: method,
+		URL:    url,
+		Headers: map[string]string{
+			"Authorization": "Bearer " + c.token,
+			"Content-Type":  "application/json",
+			"Accept":        "application/json",
+		},
+		Body: bodyStr,
+	}, c.token)
+
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.logger.LogHTTPError("http_request", &HTTPRequestInfo{
+			Method: method,
+			URL:    url,
+			Headers: map[string]string{
+				"Authorization": "Bearer " + c.token,
+				"Content-Type":  "application/json",
+			},
+			Body: bodyStr,
+		}, nil, err, c.token)
 		c.logger.Error("request failed", "method", method, "endpoint", endpoint, "error", err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	duration := time.Since(start)
-	c.logger.Access(method, endpoint, resp.StatusCode, duration)
 
 	// Read the response body
 	respBody, err := io.ReadAll(resp.Body)
@@ -188,8 +263,24 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	// Log response at DEBUG level
+	c.logger.LogHTTPResponse("api_response", &HTTPResponseInfo{
+		StatusCode: resp.StatusCode,
+		Body:       string(respBody),
+	}, duration, c.token)
+
+	c.logger.Access(method, endpoint, resp.StatusCode, duration)
+
 	// Check for errors
 	if resp.StatusCode >= 400 {
+		c.logger.LogHTTPError("api_error", &HTTPRequestInfo{
+			Method: method,
+			URL:    url,
+			Body:   bodyStr,
+		}, &HTTPResponseInfo{
+			StatusCode: resp.StatusCode,
+			Body:       string(respBody),
+		}, nil, c.token)
 		return nil, c.handleErrorResponse(resp.StatusCode, endpoint, respBody)
 	}
 
@@ -282,6 +373,11 @@ func (c *Client) BaseURL() string {
 // noopLogger is a no-op implementation of the Logger interface.
 type noopLogger struct{}
 
-func (l *noopLogger) Access(method, endpoint string, statusCode int, duration time.Duration) {}
-func (l *noopLogger) Debug(msg string, args ...any)                                          {}
-func (l *noopLogger) Error(msg string, args ...any)                                          {}
+func (l *noopLogger) Access(method, endpoint string, statusCode int, duration time.Duration)    {}
+func (l *noopLogger) Debug(msg string, args ...any)                                             {}
+func (l *noopLogger) Error(msg string, args ...any)                                             {}
+func (l *noopLogger) LogHTTPRequest(context string, req *HTTPRequestInfo, secrets ...string)    {}
+func (l *noopLogger) LogHTTPResponse(context string, resp *HTTPResponseInfo, duration time.Duration, secrets ...string) {
+}
+func (l *noopLogger) LogHTTPError(context string, req *HTTPRequestInfo, resp *HTTPResponseInfo, err error, secrets ...string) {
+}

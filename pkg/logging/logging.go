@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -462,6 +463,219 @@ func MaskToken(token string) string {
 	return token[:4] + "..." + token[len(token)-4:]
 }
 
+// MaskSecret masks a secret value showing only the last 4 characters
+// e.g., "mysecrettoken123" becomes "xxx...a1b2"
+func MaskSecret(secret string) string {
+	if secret == "" {
+		return ""
+	}
+	if len(secret) <= 4 {
+		return "xxx..." + secret
+	}
+	return "xxx..." + secret[len(secret)-4:]
+}
+
+// PII filtering patterns
+var (
+	// SSN patterns: xxx-xx-xxxx or xxxxxxxxx (9 digits)
+	ssnPattern = regexp.MustCompile(`\b(\d{3}[-\s]?\d{2}[-\s]?\d{4})\b`)
+	// PAN (credit card) patterns: 13-19 digit sequences, optionally with spaces/dashes
+	panPattern = regexp.MustCompile(`\b(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,7})\b`)
+	// Additional PAN pattern for continuous digits
+	panContinuousPattern = regexp.MustCompile(`\b(\d{13,19})\b`)
+	// JSON token patterns - mask access_token, token, api_key, secret values in JSON
+	jsonTokenPattern = regexp.MustCompile(`("(?:access_token|token|api_key|apikey|secret|password|credential|bearer|private_token)":\s*")([^"]+)(")`)
+)
+
+// SanitizePII removes or masks PII data from log messages
+// - SSNs are replaced with [SSN-REDACTED]
+// - PANs (credit card numbers) are replaced with [PAN-REDACTED]
+// - JSON token values are masked to show only last 4 characters
+func SanitizePII(message string) string {
+	// Mask SSNs
+	message = ssnPattern.ReplaceAllString(message, "[SSN-REDACTED]")
+	// Mask PANs with separators
+	message = panPattern.ReplaceAllString(message, "[PAN-REDACTED]")
+	// Mask continuous digit PANs
+	message = panContinuousPattern.ReplaceAllString(message, "[PAN-REDACTED]")
+	// Mask JSON token values (show only last 4 chars)
+	message = jsonTokenPattern.ReplaceAllStringFunc(message, func(match string) string {
+		parts := jsonTokenPattern.FindStringSubmatch(match)
+		if len(parts) == 4 {
+			// parts[1] = key and opening quote, parts[2] = value, parts[3] = closing quote
+			return parts[1] + MaskSecret(parts[2]) + parts[3]
+		}
+		return match
+	})
+	return message
+}
+
+// SanitizeAndMaskSecrets sanitizes PII and masks known secret field values
+func SanitizeAndMaskSecrets(message string, secretFields ...string) string {
+	sanitized := SanitizePII(message)
+	for _, field := range secretFields {
+		if field != "" {
+			masked := MaskSecret(field)
+			sanitized = strings.ReplaceAll(sanitized, field, masked)
+		}
+	}
+	return sanitized
+}
+
+// HTTPRequestInfo contains HTTP request details for logging
+type HTTPRequestInfo struct {
+	Method  string
+	URL     string
+	Headers map[string]string
+	Body    string
+}
+
+// HTTPResponseInfo contains HTTP response details for logging
+type HTTPResponseInfo struct {
+	StatusCode int
+	Headers    map[string]string
+	Body       string
+}
+
+// sanitizeHeaders removes sensitive header values
+func sanitizeHeaders(headers map[string]string) map[string]string {
+	if headers == nil {
+		return nil
+	}
+	sanitized := make(map[string]string)
+	sensitiveHeaders := []string{"authorization", "private-token", "x-api-key", "api-key", "token", "secret", "password", "credential"}
+	for k, v := range headers {
+		lowerKey := strings.ToLower(k)
+		isSensitive := false
+		for _, sensitive := range sensitiveHeaders {
+			if strings.Contains(lowerKey, sensitive) {
+				isSensitive = true
+				break
+			}
+		}
+		if isSensitive {
+			sanitized[k] = MaskSecret(v)
+		} else {
+			sanitized[k] = SanitizePII(v)
+		}
+	}
+	return sanitized
+}
+
+// formatHeaders formats headers for logging
+func formatHeaders(headers map[string]string) string {
+	if len(headers) == 0 {
+		return "{}"
+	}
+	parts := make([]string, 0, len(headers))
+	for k, v := range headers {
+		parts = append(parts, fmt.Sprintf("%s=%q", k, v))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// truncateBody truncates a body string if it exceeds maxLen
+func truncateBody(body string, maxLen int) string {
+	if len(body) > maxLen {
+		return body[:maxLen] + "...[truncated]"
+	}
+	return body
+}
+
+// LogHTTPRequest logs HTTP request details at DEBUG level with secret redaction
+func (l *Logger) LogHTTPRequest(context string, req *HTTPRequestInfo, secrets ...string) {
+	if l == nil || LevelDebug > l.level {
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("HTTP_REQUEST context=%q", context))
+
+	if req != nil {
+		sb.WriteString(fmt.Sprintf(" method=%s url=%q", req.Method, req.URL))
+		if len(req.Headers) > 0 {
+			sanitizedHeaders := sanitizeHeaders(req.Headers)
+			sb.WriteString(fmt.Sprintf(" headers=%s", formatHeaders(sanitizedHeaders)))
+		}
+		if req.Body != "" {
+			sanitizedBody := SanitizeAndMaskSecrets(req.Body, secrets...)
+			sanitizedBody = truncateBody(sanitizedBody, 500)
+			sb.WriteString(fmt.Sprintf(" body=%q", sanitizedBody))
+		}
+	}
+
+	l.Debug(sb.String())
+}
+
+// LogHTTPResponse logs HTTP response details at DEBUG level with secret redaction
+func (l *Logger) LogHTTPResponse(context string, resp *HTTPResponseInfo, duration time.Duration, secrets ...string) {
+	if l == nil || LevelDebug > l.level {
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("HTTP_RESPONSE context=%q", context))
+
+	if resp != nil {
+		sb.WriteString(fmt.Sprintf(" status=%d", resp.StatusCode))
+		if len(resp.Headers) > 0 {
+			sanitizedHeaders := sanitizeHeaders(resp.Headers)
+			sb.WriteString(fmt.Sprintf(" headers=%s", formatHeaders(sanitizedHeaders)))
+		}
+		if resp.Body != "" {
+			sanitizedBody := SanitizeAndMaskSecrets(resp.Body, secrets...)
+			sanitizedBody = truncateBody(sanitizedBody, 1000)
+			sb.WriteString(fmt.Sprintf(" body=%q", sanitizedBody))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf(" duration=%s", duration))
+	l.Debug(sb.String())
+}
+
+// LogHTTPError logs detailed HTTP error information with secret redaction
+func (l *Logger) LogHTTPError(context string, req *HTTPRequestInfo, resp *HTTPResponseInfo, err error, secrets ...string) {
+	if l == nil {
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("HTTP_ERROR context=%q", context))
+
+	if req != nil {
+		sb.WriteString(fmt.Sprintf(" request.method=%s request.url=%q", req.Method, req.URL))
+		if len(req.Headers) > 0 {
+			sanitizedHeaders := sanitizeHeaders(req.Headers)
+			sb.WriteString(fmt.Sprintf(" request.headers=%s", formatHeaders(sanitizedHeaders)))
+		}
+		if req.Body != "" {
+			sanitizedBody := SanitizeAndMaskSecrets(req.Body, secrets...)
+			sanitizedBody = truncateBody(sanitizedBody, 500)
+			sb.WriteString(fmt.Sprintf(" request.body=%q", sanitizedBody))
+		}
+	}
+
+	if resp != nil {
+		sb.WriteString(fmt.Sprintf(" response.status=%d", resp.StatusCode))
+		if len(resp.Headers) > 0 {
+			sanitizedHeaders := sanitizeHeaders(resp.Headers)
+			sb.WriteString(fmt.Sprintf(" response.headers=%s", formatHeaders(sanitizedHeaders)))
+		}
+		if resp.Body != "" {
+			sanitizedBody := SanitizeAndMaskSecrets(resp.Body, secrets...)
+			sanitizedBody = truncateBody(sanitizedBody, 1000)
+			sb.WriteString(fmt.Sprintf(" response.body=%q", sanitizedBody))
+		}
+	}
+
+	if err != nil {
+		sanitizedErr := SanitizeAndMaskSecrets(err.Error(), secrets...)
+		sb.WriteString(fmt.Sprintf(" error=%q", sanitizedErr))
+	}
+
+	l.Error(sb.String())
+}
+
 // Global convenience functions that use the default logger
 
 // Error logs an error using the default logger
@@ -526,3 +740,25 @@ func APIResponse(endpoint string, statusCode int, duration time.Duration) {
 		defaultLogger.APIResponse(endpoint, statusCode, duration)
 	}
 }
+
+// LogHTTPRequest logs HTTP request using the default logger
+func LogHTTPRequest(context string, req *HTTPRequestInfo, secrets ...string) {
+	if defaultLogger != nil {
+		defaultLogger.LogHTTPRequest(context, req, secrets...)
+	}
+}
+
+// LogHTTPResponse logs HTTP response using the default logger
+func LogHTTPResponse(context string, resp *HTTPResponseInfo, duration time.Duration, secrets ...string) {
+	if defaultLogger != nil {
+		defaultLogger.LogHTTPResponse(context, resp, duration, secrets...)
+	}
+}
+
+// LogHTTPError logs HTTP error using the default logger
+func LogHTTPError(context string, req *HTTPRequestInfo, resp *HTTPResponseInfo, err error, secrets ...string) {
+	if defaultLogger != nil {
+		defaultLogger.LogHTTPError(context, req, resp, err, secrets...)
+	}
+}
+
