@@ -470,6 +470,14 @@ Logs are written to date-stamped files in the log directory:
 ~/go-mcp-gitlab/logs/go-mcp-gitlab-2025-01-15.log
 ```
 
+When `MCP_LOG_DIR` is set or `-log-dir` flag is used, logs are automatically placed in a subfolder named after the binary. This allows multiple MCP servers to share the same log directory:
+
+```
+MCP_LOG_DIR=/var/log/mcp
+  └── go-mcp-gitlab/
+      └── go-mcp-gitlab-2025-01-15.log
+```
+
 ### Log Levels
 
 | Level | Description |

@@ -44,8 +44,9 @@ type Config struct {
 	ReadOnlyMode bool
 
 	// Logging
-	LogDir   string
-	LogLevel string
+	LogDir          string
+	LogLevel        string
+	AddAppSubfolder bool // When true, add app name as a subfolder to LogDir (for shared MCP_LOG_DIR)
 
 	// Sources tracking - maps config key to its source
 	Sources map[string]ConfigSource
@@ -165,6 +166,9 @@ func LoadConfig() (*Config, error) {
 		"MCP_LOG_DIR",
 		getDefaultLogDir(),
 	))
+
+	// Set AddAppSubfolder when LogDir was specified by user (not default)
+	cfg.AddAppSubfolder = cfg.Sources["LogDir"] != SourceDefault
 
 	cfg.LogLevel = cfg.loadStringWithFlag(
 		"LogLevel",

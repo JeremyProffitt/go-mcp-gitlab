@@ -41,9 +41,10 @@ func main() {
 
 	// Initialize logger
 	logger, err := logging.NewLogger(logging.Config{
-		LogDir:  cfg.LogDir,
-		AppName: AppName,
-		Level:   logging.ParseLogLevel(cfg.LogLevel),
+		LogDir:          cfg.LogDir,
+		AppName:         AppName,
+		Level:           logging.ParseLogLevel(cfg.LogLevel),
+		AddAppSubfolder: cfg.AddAppSubfolder,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
