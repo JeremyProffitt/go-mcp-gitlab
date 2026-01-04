@@ -170,6 +170,7 @@ func (c *Client) GetText(endpoint string) (string, error) {
 	// Log response at DEBUG level (body summary for text content)
 	c.logger.LogHTTPResponse("api_response_text", &HTTPResponseInfo{
 		StatusCode: resp.StatusCode,
+		Headers:    convertHeaders(resp.Header),
 		Body:       string(respBody),
 	}, duration, c.token)
 
@@ -182,6 +183,7 @@ func (c *Client) GetText(endpoint string) (string, error) {
 			URL:    url,
 		}, &HTTPResponseInfo{
 			StatusCode: resp.StatusCode,
+			Headers:    convertHeaders(resp.Header),
 			Body:       string(respBody),
 		}, nil, c.token)
 		return "", c.handleErrorResponse(resp.StatusCode, endpoint, respBody)
@@ -266,6 +268,7 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 	// Log response at DEBUG level
 	c.logger.LogHTTPResponse("api_response", &HTTPResponseInfo{
 		StatusCode: resp.StatusCode,
+		Headers:    convertHeaders(resp.Header),
 		Body:       string(respBody),
 	}, duration, c.token)
 
@@ -279,6 +282,7 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 			Body:   bodyStr,
 		}, &HTTPResponseInfo{
 			StatusCode: resp.StatusCode,
+			Headers:    convertHeaders(resp.Header),
 			Body:       string(respBody),
 		}, nil, c.token)
 		return nil, c.handleErrorResponse(resp.StatusCode, endpoint, respBody)
@@ -337,6 +341,18 @@ func (c *Client) handleErrorResponse(statusCode int, endpoint string, body []byt
 	}
 
 	return apiErr
+}
+
+// convertHeaders converts http.Header to map[string]string for logging.
+// All headers are included for debugging purposes.
+func convertHeaders(headers http.Header) map[string]string {
+	headersMap := make(map[string]string)
+	for key, values := range headers {
+		if len(values) > 0 {
+			headersMap[key] = values[0]
+		}
+	}
+	return headersMap
 }
 
 // parsePaginationHeaders extracts pagination information from response headers.
