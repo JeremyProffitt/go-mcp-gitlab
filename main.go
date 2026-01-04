@@ -17,6 +17,10 @@ const (
 )
 
 func main() {
+	// Load environment variables from ~/.mcp_env if it exists
+	// This must happen before config loading so env vars are available
+	logging.LoadEnvFile()
+
 	// Load configuration (handles -version and -help flags internally)
 	cfg, err := config.LoadConfig()
 	if err != nil {

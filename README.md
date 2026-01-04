@@ -422,6 +422,46 @@ export GITLAB_PERSONAL_ACCESS_TOKEN="glpat-xxxxxxxxxxxx"
 go-mcp-gitlab
 ```
 
+## Global Environment File
+
+All go-mcp servers support loading environment variables from `~/.mcp_env`. This provides a central location to configure credentials and settings, especially useful on macOS where GUI applications don't inherit shell environment variables from `.zshrc` or `.bashrc`.
+
+### File Format
+
+Create `~/.mcp_env` with KEY=VALUE pairs:
+
+```bash
+# ~/.mcp_env - MCP Server Environment Variables
+
+# GitLab Configuration
+GITLAB_PERSONAL_ACCESS_TOKEN=glpat-xxxxxxxxxxxx
+GITLAB_API_URL=https://gitlab.com/api/v4
+USE_PIPELINE=true
+USE_MILESTONE=true
+
+# Logging
+MCP_LOG_DIR=~/mcp-logs
+MCP_LOG_LEVEL=info
+```
+
+### Features
+
+- Lines starting with `#` are treated as comments
+- Empty lines are ignored
+- Values can be quoted with single or double quotes
+- **Existing environment variables are NOT overwritten** (env vars take precedence)
+- Paths with `~` are automatically expanded to your home directory
+
+### Path Expansion
+
+All path-related settings support `~` expansion:
+
+```bash
+MCP_LOG_DIR=~/logs/gitlab
+```
+
+This works in the `~/.mcp_env` file, environment variables, and command-line flags.
+
 ## Logging
 
 Logs are written to date-stamped files in the log directory:

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -158,12 +159,12 @@ func LoadConfig() (*Config, error) {
 	)
 
 	// Load logging configuration
-	cfg.LogDir = cfg.loadStringWithFlag(
+	cfg.LogDir = ExpandPath(cfg.loadStringWithFlag(
 		"LogDir",
 		*logDir,
 		"MCP_LOG_DIR",
 		getDefaultLogDir(),
-	)
+	))
 
 	cfg.LogLevel = cfg.loadStringWithFlag(
 		"LogLevel",
@@ -294,6 +295,30 @@ func (c *Config) IsProjectAllowed(projectID string) bool {
 	}
 
 	return false
+}
+
+// ExpandPath expands ~ to the user's home directory in file paths.
+// This is necessary because ~ is a shell feature and is not automatically
+// expanded when paths are passed via environment variables or config files.
+func ExpandPath(path string) string {
+	if path == "" {
+		return path
+	}
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return home
+	}
+	if len(path) > 1 && path[0] == '~' && (path[1] == '/' || path[1] == '\\') {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 // getDefaultLogDir returns the default log directory path.
