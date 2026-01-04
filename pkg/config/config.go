@@ -37,6 +37,9 @@ type Config struct {
 	DefaultProjectID  string
 	AllowedProjectIDs []string
 
+	// Namespace/Group defaults
+	DefaultNamespace string // Default group/namespace for project listing and creation
+
 	// Feature flags
 	UsePipeline  bool
 	UseMilestone bool
@@ -129,6 +132,14 @@ func LoadConfig() (*Config, error) {
 	if allowedProjectsStr != "" {
 		cfg.AllowedProjectIDs = parseCommaSeparated(allowedProjectsStr)
 	}
+
+	// Load default namespace/group for project operations
+	cfg.DefaultNamespace = cfg.loadString(
+		"DefaultNamespace",
+		"",
+		"GITLAB_DEFAULT_NAMESPACE",
+		"",
+	)
 
 	// Load feature flags
 	cfg.UsePipeline = cfg.loadBool(
@@ -385,6 +396,7 @@ func printHelp() {
 	fmt.Println("  GITLAB_API_URL                GitLab API URL (default: https://gitlab.com/api/v4)")
 	fmt.Println("  GITLAB_PROJECT_ID             Default project ID")
 	fmt.Println("  GITLAB_ALLOWED_PROJECT_IDS    Comma-separated list of allowed project IDs")
+	fmt.Println("  GITLAB_DEFAULT_NAMESPACE      Default namespace/group for project operations (ID or path)")
 	fmt.Println("  USE_PIPELINE                  Enable pipeline tools (default: false)")
 	fmt.Println("  USE_MILESTONE                 Enable milestone tools (default: false)")
 	fmt.Println("  USE_GITLAB_WIKI               Enable wiki tools (default: false)")

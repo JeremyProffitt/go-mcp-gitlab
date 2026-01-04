@@ -54,10 +54,14 @@ func registerListProjects(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_projects",
-			Description: "List all projects visible to the authenticated user",
+			Description: "List all projects visible to the authenticated user. If GITLAB_DEFAULT_NAMESPACE is configured, lists projects within that namespace by default.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace/group ID or path to list projects from. Overrides GITLAB_DEFAULT_NAMESPACE if set.",
+					},
 					"page": {
 						Type:        "integer",
 						Description: "Page number for pagination (default: 1)",
@@ -95,6 +99,12 @@ func registerListProjects(server *mcp.Server) {
 			}
 			c.Logger.ToolCall("list_projects", args)
 
+			// Determine namespace: explicit arg > config default > none
+			namespace := GetString(args, "namespace", "")
+			if namespace == "" && c.Config.DefaultNamespace != "" {
+				namespace = c.Config.DefaultNamespace
+			}
+
 			params := url.Values{}
 
 			if page := GetInt(args, "page", 0); page > 0 {
@@ -116,9 +126,15 @@ func registerListProjects(server *mcp.Server) {
 				params.Set("sort", sort)
 			}
 
-			endpoint := "/projects"
+			// Use group endpoint if namespace is set, otherwise list all projects
+			var endpoint string
+			if namespace != "" {
+				endpoint = fmt.Sprintf("/groups/%s/projects", url.PathEscape(namespace))
+			} else {
+				endpoint = "/projects"
+			}
 			if len(params) > 0 {
-				endpoint = fmt.Sprintf("/projects?%s", params.Encode())
+				endpoint = fmt.Sprintf("%s?%s", endpoint, params.Encode())
 			}
 
 			var projects []gitlab.Project
@@ -136,13 +152,17 @@ func registerSearchRepositories(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "search_repositories",
-			Description: "Search for GitLab repositories by name or description",
+			Description: "Search for GitLab repositories by name or description. If GITLAB_DEFAULT_NAMESPACE is configured, searches within that namespace by default.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"query": {
 						Type:        "string",
 						Description: "Search query string",
+					},
+					"namespace": {
+						Type:        "string",
+						Description: "Namespace/group ID or path to search within. Overrides GITLAB_DEFAULT_NAMESPACE if set.",
 					},
 					"page": {
 						Type:        "integer",
@@ -168,6 +188,12 @@ func registerSearchRepositories(server *mcp.Server) {
 				return ErrorResult("query is required")
 			}
 
+			// Determine namespace: explicit arg > config default > none
+			namespace := GetString(args, "namespace", "")
+			if namespace == "" && c.Config.DefaultNamespace != "" {
+				namespace = c.Config.DefaultNamespace
+			}
+
 			params := url.Values{}
 			params.Set("search", query)
 
@@ -178,7 +204,13 @@ func registerSearchRepositories(server *mcp.Server) {
 				params.Set("per_page", fmt.Sprintf("%d", perPage))
 			}
 
-			endpoint := fmt.Sprintf("/projects?%s", params.Encode())
+			// Use group endpoint if namespace is set, otherwise search all projects
+			var endpoint string
+			if namespace != "" {
+				endpoint = fmt.Sprintf("/groups/%s/projects?%s", url.PathEscape(namespace), params.Encode())
+			} else {
+				endpoint = fmt.Sprintf("/projects?%s", params.Encode())
+			}
 
 			var projects []gitlab.Project
 			if err := c.Client.Get(endpoint, &projects); err != nil {
@@ -195,13 +227,17 @@ func registerCreateRepository(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "create_repository",
-			Description: "Create a new GitLab repository/project",
+			Description: "Create a new GitLab repository/project. Uses GITLAB_DEFAULT_NAMESPACE for the target namespace if not specified.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"name": {
 						Type:        "string",
 						Description: "Name of the new project",
+					},
+					"namespace_id": {
+						Type:        "string",
+						Description: "Namespace/group ID or path to create the project in. Falls back to GITLAB_DEFAULT_NAMESPACE if not set.",
 					},
 					"description": {
 						Type:        "string",
@@ -232,10 +268,19 @@ func registerCreateRepository(server *mcp.Server) {
 				return ErrorResult("name is required")
 			}
 
+			// Determine namespace: explicit arg > config default > user's personal namespace
+			namespace := GetString(args, "namespace_id", "")
+			if namespace == "" && c.Config.DefaultNamespace != "" {
+				namespace = c.Config.DefaultNamespace
+			}
+
 			body := map[string]interface{}{
 				"name": name,
 			}
 
+			if namespace != "" {
+				body["namespace_id"] = namespace
+			}
 			if description := GetString(args, "description", ""); description != "" {
 				body["description"] = description
 			}
@@ -261,7 +306,7 @@ func registerForkRepository(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "fork_repository",
-			Description: "Fork an existing GitLab repository",
+			Description: "Fork an existing GitLab repository. Uses GITLAB_DEFAULT_NAMESPACE for the target namespace if not specified.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
@@ -271,7 +316,7 @@ func registerForkRepository(server *mcp.Server) {
 					},
 					"namespace": {
 						Type:        "string",
-						Description: "The namespace (user or group path) to fork the project into",
+						Description: "The namespace (user or group path) to fork the project into. Falls back to GITLAB_DEFAULT_NAMESPACE if not set.",
 					},
 				},
 				Required: []string{"project_id"},
@@ -289,10 +334,16 @@ func registerForkRepository(server *mcp.Server) {
 				return ErrorResult("project_id is required")
 			}
 
+			// Determine namespace: explicit arg > config default > user's personal namespace
+			namespace := GetString(args, "namespace", "")
+			if namespace == "" && c.Config.DefaultNamespace != "" {
+				namespace = c.Config.DefaultNamespace
+			}
+
 			endpoint := fmt.Sprintf("/projects/%s/fork", url.PathEscape(projectID))
 
 			var body map[string]interface{}
-			if namespace := GetString(args, "namespace", ""); namespace != "" {
+			if namespace != "" {
 				body = map[string]interface{}{
 					"namespace": namespace,
 				}
@@ -313,13 +364,13 @@ func registerListGroupProjects(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_group_projects",
-			Description: "List all projects within a GitLab group",
+			Description: "List all projects within a GitLab group. Uses GITLAB_DEFAULT_NAMESPACE if group_id is not provided.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"group_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the group",
+						Description: "The ID or URL-encoded path of the group. Falls back to GITLAB_DEFAULT_NAMESPACE if not set.",
 					},
 					"page": {
 						Type:        "integer",
@@ -334,7 +385,6 @@ func registerListGroupProjects(server *mcp.Server) {
 						Description: "Filter by archived status",
 					},
 				},
-				Required: []string{"group_id"},
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -344,9 +394,13 @@ func registerListGroupProjects(server *mcp.Server) {
 			}
 			c.Logger.ToolCall("list_group_projects", args)
 
+			// Determine group: explicit arg > config default
 			groupID := GetString(args, "group_id", "")
+			if groupID == "" && c.Config.DefaultNamespace != "" {
+				groupID = c.Config.DefaultNamespace
+			}
 			if groupID == "" {
-				return ErrorResult("group_id is required")
+				return ErrorResult("group_id is required (or set GITLAB_DEFAULT_NAMESPACE)")
 			}
 
 			params := url.Values{}
