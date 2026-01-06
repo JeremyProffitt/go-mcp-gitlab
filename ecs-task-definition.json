@@ -1,0 +1,68 @@
+{
+  "family": "go-mcp-gitlab",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "go-mcp-gitlab",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/go-mcp-gitlab:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "MCP_LOG_LEVEL",
+          "value": "info"
+        },
+        {
+          "name": "GITLAB_API_URL",
+          "value": "https://gitlab.com/api/v4"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "GITLAB_PERSONAL_ACCESS_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:mcp/gitlab:GITLAB_PERSONAL_ACCESS_TOKEN::"
+        },
+        {
+          "name": "MCP_AUTH_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:mcp/gitlab:MCP_AUTH_TOKEN::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/go-mcp-gitlab",
+          "awslogs-region": "YOUR_REGION",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 5
+      }
+    }
+  ],
+  "tags": [
+    {
+      "key": "Application",
+      "value": "go-mcp-gitlab"
+    },
+    {
+      "key": "Environment",
+      "value": "production"
+    }
+  ]
+}

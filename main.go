@@ -185,11 +185,22 @@ func main() {
 
 	// Run the server
 	logger.Info("Starting MCP server...")
-	if err := server.Run(); err != nil {
-		logger.Error("Server error: %v", err)
-		logger.LogShutdown(fmt.Sprintf("error: %v", err))
-		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
-		os.Exit(1)
+	if cfg.HTTPMode {
+		addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)
+		logger.Info("Starting HTTP server on %s", addr)
+		if err := server.RunHTTP(addr); err != nil {
+			logger.Error("HTTP server error: %v", err)
+			logger.LogShutdown(fmt.Sprintf("error: %v", err))
+			fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := server.Run(); err != nil {
+			logger.Error("Server error: %v", err)
+			logger.LogShutdown(fmt.Sprintf("error: %v", err))
+			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	logger.LogShutdown("normal exit")

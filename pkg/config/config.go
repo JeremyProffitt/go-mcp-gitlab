@@ -46,6 +46,11 @@ type Config struct {
 	UseWiki      bool
 	ReadOnlyMode bool
 
+	// HTTP Mode
+	HTTPMode bool
+	HTTPPort int
+	HTTPHost string
+
 	// Logging
 	LogDir          string
 	LogLevel        string
@@ -66,10 +71,13 @@ func LoadConfig() (*Config, error) {
 
 	// Define CLI flags
 	var (
-		logDir     = flag.String("log-dir", "", "Log directory path")
-		logLevel   = flag.String("log-level", "", "Log level: off, error, warn, info, access, debug")
+		logDir      = flag.String("log-dir", "", "Log directory path")
+		logLevel    = flag.String("log-level", "", "Log level: off, error, warn, info, access, debug")
+		httpMode    = flag.Bool("http", false, "Run in HTTP mode instead of stdio")
+		httpPort    = flag.Int("port", 3000, "HTTP port (only used with --http)")
+		httpHost    = flag.String("host", "127.0.0.1", "HTTP host (only used with --http)")
 		showVersion = flag.Bool("version", false, "Show version information")
-		showHelp   = flag.Bool("help", false, "Show help message")
+		showHelp    = flag.Bool("help", false, "Show help message")
 	)
 
 	// Parse CLI flags
@@ -187,6 +195,11 @@ func LoadConfig() (*Config, error) {
 		"MCP_LOG_LEVEL",
 		"info",
 	)
+
+	// Load HTTP mode configuration
+	cfg.HTTPMode = *httpMode
+	cfg.HTTPPort = *httpPort
+	cfg.HTTPHost = *httpHost
 
 	return cfg, nil
 }
