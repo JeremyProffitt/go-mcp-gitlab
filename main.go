@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/config"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/gitlab"
+	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/instructions"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/logging"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/mcp"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/tools"
@@ -172,6 +173,15 @@ func main() {
 	// Create MCP server
 	server := mcp.NewServer(AppName, Version)
 	logger.Info("MCP server created: name=%s, version=%s", AppName, Version)
+
+	// Set server instructions based on enabled features
+	serverInstructions := instructions.Generate(instructions.EnabledFeatures{
+		Pipelines:  cfg.UsePipeline,
+		Milestones: cfg.UseMilestone,
+		Wiki:       cfg.UseWiki,
+	})
+	server.SetInstructions(serverInstructions)
+	logger.Debug("Server instructions set (%d bytes)", len(serverInstructions))
 
 	// Register all tools
 	tools.RegisterAllTools(server)

@@ -17,14 +17,15 @@ type ToolHandler func(arguments map[string]interface{}) (*CallToolResult, error)
 
 // Server represents an MCP server
 type Server struct {
-	name     string
-	version  string
-	tools    []Tool
-	handlers map[string]ToolHandler
-	mu       sync.RWMutex
-	stdin    io.Reader
-	stdout   io.Writer
-	stderr   io.Writer
+	name         string
+	version      string
+	instructions string
+	tools        []Tool
+	handlers     map[string]ToolHandler
+	mu           sync.RWMutex
+	stdin        io.Reader
+	stdout       io.Writer
+	stderr       io.Writer
 }
 
 // NewServer creates a new MCP server
@@ -38,6 +39,14 @@ func NewServer(name, version string) *Server {
 		stdout:   os.Stdout,
 		stderr:   os.Stderr,
 	}
+}
+
+// SetInstructions sets the server instructions that will be returned during initialization.
+// These instructions guide LLM clients on how to use the server's tools effectively.
+func (s *Server) SetInstructions(instructions string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.instructions = instructions
 }
 
 // RegisterTool registers a tool with its handler
@@ -203,6 +212,10 @@ func (s *Server) handleRequest(request *JSONRPCRequest) *JSONRPCResponse {
 }
 
 func (s *Server) handleInitialize(params interface{}) *InitializeResult {
+	s.mu.RLock()
+	instructions := s.instructions
+	s.mu.RUnlock()
+
 	return &InitializeResult{
 		ProtocolVersion: "2024-11-05",
 		Capabilities: ServerCapabilities{
@@ -214,6 +227,7 @@ func (s *Server) handleInitialize(params interface{}) *InitializeResult {
 			Name:    s.name,
 			Version: s.version,
 		},
+		Instructions: instructions,
 	}
 }
 
