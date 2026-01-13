@@ -36,15 +36,20 @@ func registerListLabels(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 					"with_counts": {
 						Type:        "boolean",
@@ -119,7 +124,7 @@ func registerGetLabel(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"label_id": {
 						Type:        "string",
@@ -127,6 +132,9 @@ func registerGetLabel(server *mcp.Server) {
 					},
 				},
 				Required: []string{"project_id", "label_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -172,7 +180,7 @@ func registerCreateLabel(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"name": {
 						Type:        "string",
@@ -255,7 +263,7 @@ func registerUpdateLabel(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"label_id": {
 						Type:        "string",
@@ -349,7 +357,7 @@ func registerDeleteLabel(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"label_id": {
 						Type:        "string",

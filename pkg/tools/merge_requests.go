@@ -43,13 +43,13 @@ func registerListMergeRequests(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_merge_requests",
-			Description: "List merge requests for a project. Returns a paginated list of merge requests with their metadata.",
+			Description: "List merge requests for a project. Returns a paginated array of MR objects with title, description, state, author, and source/target branches. Use state filter to find open/merged MRs.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"state": {
 						Type:        "string",
@@ -73,14 +73,22 @@ func registerListMergeRequests(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -147,7 +155,7 @@ func registerGetMergeRequest(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -221,7 +229,7 @@ func registerCreateMergeRequest(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"source_branch": {
 						Type:        "string",
@@ -314,7 +322,7 @@ func registerUpdateMergeRequest(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -401,7 +409,7 @@ func registerMergeMergeRequest(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -473,7 +481,7 @@ func registerGetMergeRequestDiffs(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -522,7 +530,7 @@ func registerListMergeRequestDiffs(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -530,11 +538,16 @@ func registerListMergeRequestDiffs(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id", "merge_request_iid"},
@@ -596,7 +609,7 @@ func registerGetBranchDiffs(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"from": {
 						Type:        "string",
@@ -664,7 +677,7 @@ func registerCreateNote(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"noteable_type": {
 						Type:        "string",
@@ -742,7 +755,7 @@ func registerCreateMergeRequestThread(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -846,7 +859,7 @@ func registerMRDiscussions(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -854,11 +867,16 @@ func registerMRDiscussions(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id", "merge_request_iid"},
@@ -920,7 +938,7 @@ func registerUpdateMergeRequestNote(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -998,7 +1016,7 @@ func registerCreateMergeRequestNote(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -1068,7 +1086,7 @@ func registerListDraftNotes(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -1117,7 +1135,7 @@ func registerGetDraftNote(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",
@@ -1175,7 +1193,7 @@ func registerCreateDraftNote(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"merge_request_iid": {
 						Type:        "integer",

@@ -13,16 +13,19 @@ func registerGetProject(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "get_project",
-			Description: "Get details of a specific GitLab project by ID or path",
+			Description: "Get details of a specific GitLab project by ID or path. Returns comprehensive project metadata including name, description, visibility, default branch, web URL, and statistics. Use this when you have a specific project identifier.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 				},
 				Required: []string{"project_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -54,7 +57,7 @@ func registerListProjects(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_projects",
-			Description: "List all projects visible to the authenticated user. If GITLAB_DEFAULT_NAMESPACE is configured, lists projects within that namespace by default.",
+			Description: "List all projects visible to the authenticated user. Returns an array of project objects with basic metadata. Use this for broad project discovery. For targeted searches by name/description, prefer search_repositories instead. If GITLAB_DEFAULT_NAMESPACE is configured, lists projects within that namespace by default.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
@@ -64,11 +67,16 @@ func registerListProjects(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 					"search": {
 						Type:        "string",
@@ -77,7 +85,7 @@ func registerListProjects(server *mcp.Server) {
 					"visibility": {
 						Type:        "string",
 						Description: "Filter by visibility: private, internal, or public",
-						Enum:        []string{"private", "internal", "public"},
+						Enum:        []string{"public", "internal", "private"},
 					},
 					"order_by": {
 						Type:        "string",
@@ -90,6 +98,9 @@ func registerListProjects(server *mcp.Server) {
 						Enum:        []string{"asc", "desc"},
 					},
 				},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -152,7 +163,7 @@ func registerSearchRepositories(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "search_repositories",
-			Description: "Search for GitLab repositories by name or description. If GITLAB_DEFAULT_NAMESPACE is configured, searches within that namespace by default.",
+			Description: "Search for GitLab repositories by name or description using a query string. Returns matching projects sorted by relevance. Use this for targeted searches when you know keywords. For broad listing without specific search terms, use list_projects instead. If GITLAB_DEFAULT_NAMESPACE is configured, searches within that namespace by default.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
@@ -166,14 +177,22 @@ func registerSearchRepositories(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"query"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -246,7 +265,7 @@ func registerCreateRepository(server *mcp.Server) {
 					"visibility": {
 						Type:        "string",
 						Description: "Visibility level: private, internal, or public",
-						Enum:        []string{"private", "internal", "public"},
+						Enum:        []string{"public", "internal", "private"},
 					},
 					"initialize_with_readme": {
 						Type:        "boolean",
@@ -364,7 +383,7 @@ func registerListGroupProjects(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_group_projects",
-			Description: "List all projects within a GitLab group. Uses GITLAB_DEFAULT_NAMESPACE if group_id is not provided.",
+			Description: "List all projects within a GitLab group. Returns an array of project objects. Use this when you specifically want to list projects in a known group. For general project discovery, use list_projects instead. Uses GITLAB_DEFAULT_NAMESPACE if group_id is not provided.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
@@ -374,17 +393,25 @@ func registerListGroupProjects(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 					"archived": {
 						Type:        "boolean",
-						Description: "Filter by archived status",
+						Description: "Filter by archived status (true = only archived, false = only active, omit = all)",
 					},
 				},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -437,13 +464,13 @@ func registerGetRepositoryTree(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "get_repository_tree",
-			Description: "Get the repository file tree for a GitLab project",
+			Description: "Get the repository file tree for a GitLab project. Returns an array of tree nodes (files and directories) with name, path, type, and mode. Use this to explore directory structure before fetching specific files with get_file_contents.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"path": {
 						Type:        "string",
@@ -459,6 +486,9 @@ func registerGetRepositoryTree(server *mcp.Server) {
 					},
 				},
 				Required: []string{"project_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -517,24 +547,32 @@ func registerListProjectMembers(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_project_members",
-			Description: "List all members of a GitLab project",
+			Description: "List all members of a GitLab project. Returns an array of member objects with username, name, access level (10=Guest, 20=Reporter, 30=Developer, 40=Maintainer, 50=Owner), and membership details.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {

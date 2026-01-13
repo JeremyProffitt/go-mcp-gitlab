@@ -66,9 +66,22 @@ type InitializeResult struct {
 
 // Tool types
 type Tool struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description,omitempty"`
-	InputSchema JSONSchema `json:"inputSchema"`
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	InputSchema JSONSchema       `json:"inputSchema"`
+	Annotations *ToolAnnotations `json:"annotations,omitempty"`
+}
+
+// ToolAnnotations provides hints about tool behavior for LLM clients.
+type ToolAnnotations struct {
+	// ReadOnlyHint indicates the tool only reads data and does not modify state.
+	ReadOnlyHint bool `json:"readOnlyHint,omitempty"`
+	// DestructiveHint indicates the tool may perform destructive operations.
+	DestructiveHint bool `json:"destructiveHint,omitempty"`
+	// IdempotentHint indicates calling the tool multiple times with same args has same effect.
+	IdempotentHint bool `json:"idempotentHint,omitempty"`
+	// OpenWorldHint indicates the tool interacts with external entities.
+	OpenWorldHint bool `json:"openWorldHint,omitempty"`
 }
 
 type JSONSchema struct {
@@ -83,9 +96,16 @@ type Property struct {
 	Type        string              `json:"type,omitempty"`
 	Description string              `json:"description,omitempty"`
 	Default     interface{}         `json:"default,omitempty"`
+	Minimum     *int                `json:"minimum,omitempty"`
+	Maximum     *int                `json:"maximum,omitempty"`
 	Enum        []string            `json:"enum,omitempty"`
 	Items       *Property           `json:"items,omitempty"`
 	Properties  map[string]Property `json:"properties,omitempty"`
+}
+
+// IntPtr is a helper function for creating pointer values for Property constraints.
+func IntPtr(v int) *int {
+	return &v
 }
 
 type ListToolsResult struct {

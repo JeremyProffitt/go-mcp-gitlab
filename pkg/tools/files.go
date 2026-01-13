@@ -73,13 +73,13 @@ func registerGetFileContents(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "get_file_contents",
-			Description: "Get the contents of a file from a GitLab repository",
+			Description: "Get the contents of a file from a GitLab repository. Returns file content (decoded from base64), file metadata, blob ID, and last commit ID. Use ref to get file from specific branch/tag/commit.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"file_path": {
 						Type:        "string",
@@ -91,6 +91,9 @@ func registerGetFileContents(server *mcp.Server) {
 					},
 				},
 				Required: []string{"project_id", "file_path"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -168,7 +171,7 @@ func registerCreateOrUpdateFile(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"file_path": {
 						Type:        "string",
@@ -310,7 +313,7 @@ func registerPushFiles(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"branch": {
 						Type:        "string",
@@ -445,7 +448,7 @@ func registerUploadMarkdown(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"file": {
 						Type:        "string",

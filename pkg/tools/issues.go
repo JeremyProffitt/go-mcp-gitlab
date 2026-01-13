@@ -33,7 +33,7 @@ func registerListIssues(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"state": {
 						Type:        "string",
@@ -55,11 +55,16 @@ func registerListIssues(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id"},
@@ -140,11 +145,16 @@ func registerMyIssues(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 			},
@@ -201,7 +211,7 @@ func registerGetIssue(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -254,7 +264,7 @@ func registerCreateIssue(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"title": {
 						Type:        "string",
@@ -342,7 +352,7 @@ func registerUpdateIssue(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -448,7 +458,7 @@ func registerDeleteIssue(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -500,7 +510,7 @@ func registerListIssueLinks(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -553,7 +563,7 @@ func registerGetIssueLink(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -616,7 +626,7 @@ func registerCreateIssueLink(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -702,7 +712,7 @@ func registerDeleteIssueLink(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -764,7 +774,7 @@ func registerListIssueDiscussions(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"issue_iid": {
 						Type:        "integer",
@@ -772,11 +782,16 @@ func registerListIssueDiscussions(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id", "issue_iid"},

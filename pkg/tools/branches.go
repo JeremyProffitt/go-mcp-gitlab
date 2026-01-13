@@ -21,7 +21,7 @@ func registerCreateBranch(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"branch": {
 						Type:        "string",
@@ -79,13 +79,13 @@ func registerListCommits(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_commits",
-			Description: "List repository commits in a GitLab project",
+			Description: "List repository commits in a GitLab project. Returns an array of commit objects with SHA, message, author, and timestamp. Filter by ref_name for specific branch/tag commits.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"ref_name": {
 						Type:        "string",
@@ -105,14 +105,22 @@ func registerListCommits(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -175,13 +183,13 @@ func registerGetCommit(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "get_commit",
-			Description: "Get a specific commit from a GitLab project repository",
+			Description: "Get comprehensive details of a specific commit by SHA or ref name. Returns full commit info including message, author, committer, parent SHAs, and stats.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"sha": {
 						Type:        "string",
@@ -189,6 +197,9 @@ func registerGetCommit(server *mcp.Server) {
 					},
 				},
 				Required: []string{"project_id", "sha"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -228,13 +239,13 @@ func registerGetCommitDiff(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "get_commit_diff",
-			Description: "Get the diff of a commit in a GitLab project repository",
+			Description: "Get the diff (code changes) of a commit. Returns an array of diff objects showing changed files with old/new paths and line changes.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"sha": {
 						Type:        "string",
@@ -242,14 +253,22 @@ func registerGetCommitDiff(server *mcp.Server) {
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 				},
 				Required: []string{"project_id", "sha"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -304,21 +323,26 @@ func registerListReleases(server *mcp.Server) {
 	server.RegisterTool(
 		mcp.Tool{
 			Name:        "list_releases",
-			Description: "List releases of a GitLab project",
+			Description: "List releases of a GitLab project. Returns an array of release objects with tag name, name, description, and release date. Ordered by released_at by default.",
 			InputSchema: mcp.JSONSchema{
 				Type: "object",
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"page": {
 						Type:        "integer",
-						Description: "Page number for pagination (default: 1)",
+						Description: "Page number for pagination",
+						Default:     1,
+						Minimum:     mcp.IntPtr(1),
 					},
 					"per_page": {
 						Type:        "integer",
-						Description: "Number of items per page (default: 20, max: 100)",
+						Description: "Number of items per page",
+						Default:     20,
+						Minimum:     mcp.IntPtr(1),
+						Maximum:     mcp.IntPtr(100),
 					},
 					"order_by": {
 						Type:        "string",
@@ -332,6 +356,9 @@ func registerListReleases(server *mcp.Server) {
 					},
 				},
 				Required: []string{"project_id"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
@@ -392,7 +419,7 @@ func registerDownloadAttachment(server *mcp.Server) {
 				Properties: map[string]mcp.Property{
 					"project_id": {
 						Type:        "string",
-						Description: "The ID or URL-encoded path of the project",
+						Description: "The project identifier - either a numeric ID (e.g., 42) or URL-encoded path (e.g., my-group/my-project)",
 					},
 					"secret": {
 						Type:        "string",
@@ -404,6 +431,9 @@ func registerDownloadAttachment(server *mcp.Server) {
 					},
 				},
 				Required: []string{"project_id", "secret", "filename"},
+			},
+			Annotations: &mcp.ToolAnnotations{
+				ReadOnlyHint: true,
 			},
 		},
 		func(args map[string]interface{}) (*mcp.CallToolResult, error) {
