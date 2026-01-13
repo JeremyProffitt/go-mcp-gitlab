@@ -1605,6 +1605,159 @@ Once deployed, the multi-server Lambda provides these endpoints:
 | 5 separate Lambdas | ~$25-50 | 5x cold starts, 5x deployments |
 | 1 multi-server Lambda | ~$15-25 | Single deployment, shared cold start |
 
+#### Multi-Server Deployment Concerns
+
+Before deploying multiple MCP servers in a single Lambda or container, evaluate these trade-offs:
+
+##### Fault Isolation Risks
+
+| Risk | Lambda Impact | ECS Impact | Mitigation |
+|------|--------------|------------|------------|
+| **Single server crash** | Router failure kills all servers | Supervisor restarts, but brief outage | Circuit breakers; health-based routing |
+| **Memory exhaustion** | Lambda terminates entirely | Task killed, ECS restarts | Memory limits per process; monitoring |
+| **Deadlocked server** | All requests time out | Other servers blocked | Per-server timeouts; async processing |
+| **Credential leak** | All server credentials exposed | All server credentials exposed | Per-request headers; Secrets Manager |
+
+##### Operational Trade-offs
+
+| Factor | Multi-Server | Separate Deployments |
+|--------|-------------|---------------------|
+| **Deployment frequency** | All-or-nothing updates | Independent release cycles |
+| **Rollback granularity** | Must rollback all servers | Per-server rollback |
+| **Debugging** | Interleaved logs; harder isolation | Clean separation |
+| **Monitoring** | Complex aggregated metrics | Simple per-server metrics |
+| **Cost** | Lower (shared resources) | Higher (dedicated resources) |
+| **Cold starts** | Single cold start for all | Each server has own cold start |
+| **Scaling** | All servers scale together | Independent scaling |
+
+##### Lambda-Specific Concerns
+
+| Concern | Description | Recommendation |
+|---------|-------------|----------------|
+| **Cold start time** | 5-server image ~150MB = 2-5s cold start | Use Provisioned Concurrency if latency critical |
+| **Timeout sharing** | 15 min max shared across all servers | Keep individual operations under 30s |
+| **Concurrent execution** | 1000 default limit shared | Request limit increase if needed |
+| **Memory allocation** | CPU scales with memory | Use 1024MB+ for 5 servers |
+| **Payload size** | 6 MB sync, 256 KB async | Implement pagination in servers |
+
+##### ECS-Specific Concerns
+
+| Concern | Description | Recommendation |
+|---------|-------------|----------------|
+| **Task placement** | Single task = single failure domain | Run 2+ tasks across AZs |
+| **Target group limits** | 5 target groups per service | Use path-based routing with single ALB |
+| **Health check cascade** | One unhealthy port = unhealthy task | Use lenient health thresholds |
+| **Log aggregation** | All servers log to same stream | Use log prefixes; separate by server name |
+| **Resource contention** | Servers compete for CPU/memory | Set appropriate task size |
+
+##### Security Considerations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| **Shared process space** | Lateral movement between servers | Use per-request credentials; minimize env vars |
+| **Credential aggregation** | Single breach exposes all credentials | Secrets Manager with fine-grained IAM |
+| **Audit trail complexity** | Harder to trace which server did what | Request correlation IDs; structured logging |
+| **Attack surface** | More endpoints = more attack vectors | Selective server deployment; WAF rules |
+
+##### Decision Matrix
+
+| Scenario | Recommendation | Rationale |
+|----------|---------------|-----------|
+| Development/Testing | Multi-server | Cost savings; simplified setup |
+| Staging | Multi-server | Mirror production patterns; cost savings |
+| Production (low traffic) | Multi-server | Cost effective; acceptable trade-offs |
+| Production (variable traffic) | Separate | Independent scaling; fault isolation |
+| High-security environments | Separate | Credential isolation; audit requirements |
+| Latency-critical applications | Separate | Avoid cold start penalties |
+
+##### Monitoring for Multi-Server Deployments
+
+Essential CloudWatch metrics to configure:
+
+```hcl
+# Terraform: CloudWatch Alarms for Multi-Server
+resource "aws_cloudwatch_metric_alarm" "multi_server_errors" {
+  for_each = toset(["gitlab", "atlassian", "dynatrace", "pagerduty", "servicenow"])
+
+  alarm_name          = "mcp-${each.key}-error-rate"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 10
+
+  dimensions = {
+    FunctionName = "mcp-multi-server"
+    Resource     = each.key
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "cold_start_duration" {
+  alarm_name          = "mcp-multi-server-cold-start"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "InitDuration"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 5000  # 5 seconds
+
+  dimensions = {
+    FunctionName = "mcp-multi-server"
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+}
+```
+
+##### Circuit Breaker Implementation
+
+Protect against cascading failures:
+
+```go
+// Per-server circuit breaker for Lambda router
+type CircuitBreaker struct {
+    mu          sync.RWMutex
+    failures    map[string]int
+    lastFailure map[string]time.Time
+    threshold   int
+    timeout     time.Duration
+}
+
+func (cb *CircuitBreaker) Allow(server string) bool {
+    cb.mu.RLock()
+    defer cb.mu.RUnlock()
+
+    if cb.failures[server] < cb.threshold {
+        return true
+    }
+
+    // Check if timeout has passed
+    if time.Since(cb.lastFailure[server]) > cb.timeout {
+        return true // Allow retry
+    }
+
+    return false
+}
+
+func (cb *CircuitBreaker) RecordFailure(server string) {
+    cb.mu.Lock()
+    defer cb.mu.Unlock()
+    cb.failures[server]++
+    cb.lastFailure[server] = time.Now()
+}
+
+func (cb *CircuitBreaker) RecordSuccess(server string) {
+    cb.mu.Lock()
+    defer cb.mu.Unlock()
+    cb.failures[server] = 0
+}
+```
+
 ---
 
 ## Section B: ECS Fargate Deployment

@@ -1794,6 +1794,123 @@ services:
       retries: 3
 ```
 
+### Multi-Server Deployment Concerns
+
+Before deploying multiple MCP servers in a single container or Lambda, consider these trade-offs:
+
+#### Fault Isolation
+
+| Concern | Impact | Mitigation |
+|---------|--------|------------|
+| **Process crash propagation** | One server crash in supervisor mode terminates all servers | Use `autorestart=true` in supervisor; implement watchdog |
+| **Memory leaks** | Memory leak in one server affects all servers | Monitor per-process memory; set memory limits per process |
+| **Runaway CPU** | CPU-intensive operation blocks other servers | Use process-level CPU limits with cgroups |
+| **Deadlocks** | Deadlock in router blocks all traffic | Implement health-based routing with failover |
+
+#### Scaling Limitations
+
+| Concern | Impact | Mitigation |
+|---------|--------|------------|
+| **No independent scaling** | Cannot scale GitLab server without scaling all servers | Use separate containers if traffic patterns vary significantly |
+| **Resource waste** | Low-traffic servers consume resources | Use selective deployment with only needed servers |
+| **Cold start penalty** | Larger image = slower Lambda cold starts | Consider separate Lambdas for latency-critical servers |
+| **Uneven load distribution** | One busy server affects others | Implement request queuing per server |
+
+#### Operational Complexity
+
+| Concern | Impact | Mitigation |
+|---------|--------|------------|
+| **Deployment coupling** | One server update requires full redeployment | Use semantic versioning; implement blue-green deployment |
+| **Debugging difficulty** | Log interleaving makes debugging harder | Use structured logging with server tags; separate log streams |
+| **Health check complexity** | Aggregated health masks individual failures | Implement per-server health endpoints; detailed health response |
+| **Version mismatch** | All servers must be compatible versions | Maintain compatibility matrix; test combinations |
+
+#### Security Considerations
+
+| Concern | Impact | Mitigation |
+|---------|--------|------------|
+| **Shared credential exposure** | Compromise of one server exposes all credentials | Use per-request credentials via headers instead of env vars |
+| **Attack surface** | More servers = larger attack surface | Minimize enabled servers; use selective deployment |
+| **Privilege escalation** | Shared process space allows lateral movement | Use non-root users; read-only filesystem |
+| **Audit complexity** | Harder to audit which server accessed what | Implement request tracing with correlation IDs |
+
+#### Resource Constraints
+
+| Resource | Lambda Limit | ECS Limit | Recommendation |
+|----------|-------------|-----------|----------------|
+| Memory | 10,240 MB max | Task-level limit | 1024 MB minimum for 5 servers |
+| CPU | Proportional to memory | 4 vCPU max | 1 vCPU minimum for 5 servers |
+| Timeout | 15 minutes | No limit | Keep requests under 30s |
+| Connections | 1000 concurrent | Network-dependent | Implement connection pooling |
+| Disk | 10 GB /tmp | 200 GB ephemeral | Minimal disk usage |
+
+#### When to Use Multi-Server vs Separate Deployments
+
+**Use Multi-Server When:**
+- Development/staging environments with low traffic
+- Cost optimization is primary concern
+- All servers have similar traffic patterns
+- Simplified operations is desired
+- Teams are small with limited DevOps resources
+
+**Use Separate Deployments When:**
+- Production environments with variable traffic
+- Individual server SLAs required
+- Independent scaling needed
+- Security isolation required
+- Different update cadences per server
+- Debugging and monitoring are critical
+
+#### Monitoring Recommendations
+
+```yaml
+# CloudWatch Alarms for Multi-Server Container
+Alarms:
+  - Name: "MCP-MultiServer-HighMemory"
+    Metric: MemoryUtilization
+    Threshold: 80%
+    Action: Scale up or alert
+
+  - Name: "MCP-MultiServer-ServerUnhealthy"
+    Metric: HealthyHostCount
+    Threshold: < expected
+    Action: Alert and investigate
+
+  - Name: "MCP-MultiServer-HighLatency"
+    Metric: TargetResponseTime
+    Threshold: 5000ms
+    Action: Investigate specific server
+
+# Per-Server Metrics (Custom)
+CustomMetrics:
+  - Name: "MCP-{Server}-RequestCount"
+  - Name: "MCP-{Server}-ErrorRate"
+  - Name: "MCP-{Server}-ResponseTime"
+```
+
+#### Graceful Degradation Pattern
+
+```go
+// Router with per-server circuit breaker
+type ServerCircuit struct {
+    failures    int
+    lastFailure time.Time
+    open        bool
+}
+
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+    server := extractServer(req.URL.Path)
+
+    if r.circuits[server].open {
+        // Return 503 for this server only, others still work
+        http.Error(w, fmt.Sprintf("%s temporarily unavailable", server), 503)
+        return
+    }
+
+    // Forward request...
+}
+```
+
 ---
 
 ## Appendix A: Quick Reference
