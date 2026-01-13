@@ -95,6 +95,126 @@ Configuration values are resolved in the following priority order:
 2. Environment variables
 3. Default values (lowest priority)
 
+## LLM Usage Guide
+
+This section provides guidance for LLMs and AI assistants using this MCP server.
+
+### Parameter Formats
+
+#### project_id Parameter
+
+The `project_id` parameter accepts multiple formats:
+
+| Format | Example | Description |
+|--------|---------|-------------|
+| Numeric ID | `"12345"` | Stable identifier, survives project renames |
+| Simple path | `"my-group/my-project"` | Group and project name |
+| Nested path | `"my-org/team-a/services/api"` | Full namespace path for nested groups |
+| URL-encoded | `"my-group%2Fmy-project"` | Required when path contains special characters |
+
+**Best Practice**: Use numeric IDs when stability is important. Use paths for human readability.
+
+#### Pagination Parameters
+
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `page` | integer | 1 | - | Page number (1-indexed) |
+| `per_page` | integer | 20 | 100 | Results per page |
+
+**Best Practice**: Use `per_page=20` to avoid overwhelming context. Fetch additional pages only when needed.
+
+#### State Parameters
+
+| Tool Type | Valid States |
+|-----------|--------------|
+| Issues | `"opened"`, `"closed"`, `"all"` |
+| Merge Requests | `"opened"`, `"closed"`, `"merged"`, `"all"` |
+| Pipelines | `"pending"`, `"running"`, `"success"`, `"failed"`, `"canceled"`, `"skipped"` |
+
+#### Date/Time Format
+
+All date parameters use ISO 8601 format: `"2025-01-15T10:30:00Z"`
+
+#### Label Format
+
+Labels are passed as arrays: `["bug", "priority::high", "team::backend"]`
+
+Use `::` for scoped labels (GitLab feature for mutually exclusive labels).
+
+### Tool Selection Guide
+
+| Goal | Tool Pattern | Example |
+|------|--------------|---------|
+| Browse all items | `list_*` | `list_projects`, `list_issues` |
+| Search by keywords | `search_*` | `search_repositories` |
+| Get specific item by ID | `get_*` | `get_project`, `get_issue` |
+| Create new item | `create_*` | `create_issue`, `create_branch` |
+| Modify existing item | `update_*` | `update_issue`, `update_merge_request` |
+| Remove item | `delete_*` | `delete_issue`, `delete_label` |
+
+### Common Workflows
+
+#### 1. Code Review Workflow
+
+```
+1. list_merge_requests(project_id, state="opened") - Find open MRs
+2. get_merge_request(project_id, merge_request_iid) - Get MR details
+3. get_merge_request_diffs(project_id, merge_request_iid) - Review code changes
+4. mr_discussions(project_id, merge_request_iid) - Read existing feedback
+5. create_merge_request_thread(project_id, merge_request_iid, body, position) - Add review comment
+```
+
+#### 2. Issue Triage Workflow
+
+```
+1. list_issues(project_id, state="opened", labels=["needs-triage"])
+2. get_issue(project_id, issue_iid) - Get full details
+3. list_issue_discussions(project_id, issue_iid) - Read comments
+4. update_issue(project_id, issue_iid, labels=["bug", "priority::medium"]) - Categorize
+```
+
+#### 3. Repository Exploration
+
+```
+1. get_project(project_id) - Get project metadata and default branch
+2. get_repository_tree(project_id, path="", recursive=true) - List all files
+3. get_file_contents(project_id, file_path, ref="main") - Read specific file
+```
+
+#### 4. Feature Branch Development
+
+```
+1. create_branch(project_id, branch="feature-xyz", ref="main")
+2. create_or_update_file(project_id, file_path, content, branch="feature-xyz", commit_message="...")
+3. create_merge_request(project_id, source_branch="feature-xyz", target_branch="main", title="...")
+```
+
+#### 5. Pipeline Debugging (requires USE_PIPELINE=true)
+
+```
+1. list_pipelines(project_id, status="failed") - Find failed pipelines
+2. list_pipeline_jobs(project_id, pipeline_id, scope=["failed"]) - Find failed jobs
+3. get_pipeline_job_output(project_id, job_id, extract="errors") - Get error details
+```
+
+#### 6. Release Investigation
+
+```
+1. list_releases(project_id) - Get recent releases
+2. get_commit(project_id, sha=release.tag) - Get release commit details
+3. list_merge_requests(project_id, state="merged", target_branch="main") - Find merged MRs
+```
+
+### Token Efficiency Tips
+
+1. **Use targeted tools**: Prefer `get_issue(id)` over `list_issues()` when you know the ID
+2. **Apply filters**: Use `state`, `labels`, `scope` parameters to reduce results
+3. **Limit page size**: Use `per_page=10` for initial exploration
+4. **Use text format**: Set `format="text"` where available for compact output
+5. **Cache project_id**: Store the project ID after first lookup to avoid repeated resolution
+
+---
+
 ## MCP Tools
 
 ### Project Tools
@@ -609,6 +729,65 @@ export GITLAB_READ_ONLY_MODE=true
 export GITLAB_ALLOWED_PROJECT_IDS="my-group/project-a,my-group/project-b"
 go-mcp-gitlab
 ```
+
+## Tool Reference by Category
+
+This comprehensive reference organizes all tools by functional category for quick lookup.
+
+### Core Operations
+
+| Category | Read Tools | Write Tools |
+|----------|------------|-------------|
+| **Projects** | `get_project`, `list_projects`, `search_repositories`, `list_group_projects`, `get_repository_tree`, `list_project_members` | `create_repository`, `fork_repository` |
+| **Files** | `get_file_contents` | `create_or_update_file`, `push_files`, `upload_markdown` |
+| **Issues** | `list_issues`, `my_issues`, `get_issue`, `list_issue_links`, `get_issue_link`, `list_issue_discussions` | `create_issue`, `update_issue`, `delete_issue`, `create_issue_link`, `delete_issue_link` |
+| **Merge Requests** | `list_merge_requests`, `get_merge_request`, `get_merge_request_diffs`, `list_merge_request_diffs`, `get_branch_diffs`, `mr_discussions`, `list_draft_notes`, `get_draft_note` | `create_merge_request`, `update_merge_request`, `merge_merge_request`, `create_note`, `create_merge_request_thread`, `update_merge_request_note`, `create_merge_request_note`, `create_draft_note` |
+| **Branches/Commits** | `list_commits`, `get_commit`, `get_commit_diff`, `list_releases`, `download_attachment` | `create_branch` |
+| **Labels** | `list_labels`, `get_label` | `create_label`, `update_label`, `delete_label` |
+| **Namespaces** | `list_namespaces`, `get_namespace`, `verify_namespace` | - |
+| **Users** | `get_users` | - |
+
+### Feature-Flagged Operations
+
+#### Pipeline Tools (USE_PIPELINE=true)
+
+| Category | Read Tools | Write Tools |
+|----------|------------|-------------|
+| **Pipelines** | `list_pipelines`, `get_pipeline`, `list_pipeline_jobs`, `list_pipeline_trigger_jobs`, `get_pipeline_job`, `get_pipeline_job_output` | `create_pipeline`, `retry_pipeline`, `cancel_pipeline`, `play_pipeline_job`, `retry_pipeline_job`, `cancel_pipeline_job` |
+
+#### Milestone Tools (USE_MILESTONE=true)
+
+| Category | Read Tools | Write Tools |
+|----------|------------|-------------|
+| **Milestones** | `list_milestones`, `get_milestone`, `get_milestone_issues`, `get_milestone_merge_requests`, `get_milestone_burndown_events` | `create_milestone`, `edit_milestone`, `delete_milestone`, `promote_milestone` |
+
+#### Wiki Tools (USE_GITLAB_WIKI=true)
+
+| Category | Read Tools | Write Tools |
+|----------|------------|-------------|
+| **Wiki** | `list_wiki_pages`, `get_wiki_page` | `create_wiki_page`, `update_wiki_page`, `delete_wiki_page`, `upload_wiki_attachment` |
+
+### Quick Tool Finder
+
+| If you want to... | Use this tool |
+|-------------------|---------------|
+| Find a project by name | `search_repositories` |
+| Get project details | `get_project` |
+| List files in a directory | `get_repository_tree` |
+| Read a file | `get_file_contents` |
+| Create/update a file | `create_or_update_file` |
+| List open issues | `list_issues` with `state="opened"` |
+| Find my assigned issues | `my_issues` |
+| Create an issue | `create_issue` |
+| List open MRs | `list_merge_requests` with `state="opened"` |
+| See MR code changes | `get_merge_request_diffs` |
+| Create a branch | `create_branch` |
+| Create a merge request | `create_merge_request` |
+| Check pipeline status | `get_pipeline` |
+| Get job logs | `get_pipeline_job_output` |
+| Find errors in job logs | `get_pipeline_job_output` with `extract="errors"` |
+
+---
 
 ## License
 

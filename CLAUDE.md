@@ -236,3 +236,96 @@ If any checklist item fails:
 3. **Verify the Fix**: Re-run the relevant checks
 4. **Update Tests**: Add tests for new functionality if applicable
 5. **Re-verify Checklist**: Ensure fix didn't break other items
+
+## LLM Usability Guidelines
+
+When developing or modifying this MCP server, follow these guidelines to ensure optimal LLM usability.
+
+### Tool Description Best Practices
+
+1. **Lead with action**: Start descriptions with verbs (Get, List, Create, Update, Delete)
+2. **Be specific**: "Get merge request details by IID" not "Get MR"
+3. **Include key capabilities**: "List issues with state/label/assignee filters"
+4. **Avoid redundancy**: Don't repeat "GitLab" in every description
+5. **Maximum 200 characters**: Keep descriptions concise
+
+**Good Examples:**
+- `get_project`: "Get project details including name, description, visibility, and default branch"
+- `list_issues`: "List project issues with optional state, label, and assignee filters"
+- `create_branch`: "Create a new branch from specified ref (branch, tag, or commit SHA)"
+
+**Bad Examples:**
+- "Get a GitLab project from GitLab API" (redundant)
+- "Project getter" (unclear action)
+- "This tool retrieves..." (verbose)
+
+### Parameter Description Best Practices
+
+1. **Include format examples**: `project_id` should mention "12345 or my-group/my-project"
+2. **Document valid values**: For enums, list options in description
+3. **Specify defaults**: "Default: 20, max: 100"
+4. **Note interdependencies**: "Required when X is specified"
+
+**Good Examples:**
+- `project_id`: "Project ID (numeric) or path (my-group/my-project)"
+- `state`: "Filter by state: opened, closed, merged, or all (default: all)"
+- `per_page`: "Results per page (default: 20, max: 100)"
+
+### Schema Best Practices
+
+1. **Use correct types**: `integer` for counts/IDs, `string` for text
+2. **Add constraints**: `minimum`, `maximum` for numbers
+3. **Define enums**: Use schema `enum` for fixed value sets
+4. **Mark required fields**: Only truly required parameters in `required` array
+
+### Tool Annotations
+
+All tools should have appropriate annotations:
+
+```go
+Annotations: &mcp.ToolAnnotations{
+    Title:           "Get Project",
+    ReadOnlyHint:    true,  // for get_*, list_*, search_*
+    DestructiveHint: true,  // for delete_*
+    IdempotentHint:  true,  // for safe-to-retry operations
+}
+```
+
+### Documentation Files to Update
+
+When modifying tools, update these files:
+
+| File | Purpose | Update When |
+|------|---------|-------------|
+| `pkg/instructions/docs/base.md` | Core LLM instructions | Any tool change |
+| `pkg/instructions/docs/pipelines.md` | Pipeline tool docs | Pipeline tool changes |
+| `pkg/instructions/docs/terraform.md` | Extraction docs | Extractor changes |
+| `docs/llm-usage.md` | Standalone user docs | Any tool change |
+| `README.md` | User-facing docs | Any significant change |
+
+### Testing LLM Usability
+
+Before committing, verify:
+
+1. **Tool discovery**: Can an LLM find the right tool from a task description?
+2. **Parameter clarity**: Are required parameters and formats obvious?
+3. **Error messages**: Do errors guide toward resolution?
+4. **Workflow support**: Can common workflows be completed efficiently?
+
+### Common Workflow Patterns
+
+Document these workflow patterns in instructions:
+
+1. **Discovery -> Detail**: `list_*` then `get_*`
+2. **Read -> Modify -> Verify**: `get_*` then `update_*` then `get_*`
+3. **Create -> Configure**: `create_*` then `update_*`
+4. **Debug -> Fix -> Retry**: `get_*_output(extract="errors")` then fix then `retry_*`
+
+### Token Efficiency Considerations
+
+Design tools to minimize token usage:
+
+1. **Filtering**: Add state/scope/label parameters to reduce results
+2. **Pagination**: Default to reasonable page sizes (20)
+3. **Format options**: Support `format="text"` for compact output
+4. **Targeted extraction**: Use `extract` parameter for log parsing
