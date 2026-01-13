@@ -85,38 +85,35 @@ func (s *Server) Run() error {
 
 // RunHTTP starts the server in HTTP mode with optional authentication
 func (s *Server) RunHTTP(addr string) error {
+	return s.RunHTTPWithAuthorizer(addr, nil)
+}
+
+// RunHTTPWithAuthorizer starts the server in HTTP mode with a custom authorizer.
+// If authorizer is nil, falls back to environment-based token validation.
+func (s *Server) RunHTTPWithAuthorizer(addr string, authorizer auth.Authorizer) error {
 	mux := http.NewServeMux()
 
 	// Health check endpoint (no auth required)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "healthy",
-			"server": s.name,
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "ok",
+			"version": s.version,
 		})
 	})
 
-	// MCP endpoint with authentication
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// MCP endpoint handler
+	mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip non-root paths (already handled by /health)
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
 			return
 		}
 
-		// Check authentication if enabled
-		if auth.IsAuthEnabled() {
-			token := r.Header.Get(auth.AuthHeaderName)
-			if !auth.ValidateAgainstExpected(token) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"jsonrpc": "2.0",
-					"id":      nil,
-					"error":   map[string]interface{}{"code": -32001, "message": "Unauthorized: invalid or missing authentication token"},
-				})
-				return
-			}
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
 
 		body, err := io.ReadAll(r.Body)
@@ -131,19 +128,38 @@ func (s *Server) RunHTTP(addr string) error {
 			return
 		}
 
-		response := s.handleMessage(body)
+		// Handle the message with request context for header-based credentials
+		response := s.handleMessageWithContext(r, body)
 		if response != nil {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}
 	})
 
-	if auth.IsAuthEnabled() {
+	// Apply auth middleware
+	mux.Handle("/", auth.AuthMiddleware(authorizer, mcpHandler))
+
+	if auth.IsAuthEnabled() || authorizer != nil {
 		fmt.Fprintf(s.stderr, "GitLab MCP Server running on HTTP at %s (authentication enabled)\n", addr)
 	} else {
 		fmt.Fprintf(s.stderr, "GitLab MCP Server running on HTTP at %s (authentication disabled)\n", addr)
 	}
 	return http.ListenAndServe(addr, mux)
+}
+
+// handleMessageWithContext processes a message and stores request context for header-based credentials
+func (s *Server) handleMessageWithContext(r *http.Request, data []byte) *JSONRPCResponse {
+	// Store the GitLab token from header if present
+	gitlabToken := r.Header.Get(auth.GitLabTokenHeader)
+	if gitlabToken != "" {
+		// Store in request context for tool handlers to access
+		ctx := auth.WithGitLabToken(r.Context(), gitlabToken)
+		auth.SetCurrentGitLabToken(gitlabToken)
+		defer auth.ClearCurrentGitLabToken()
+		_ = ctx // Context is set via global for now since tool handlers don't have access to request
+	}
+
+	return s.handleMessage(data)
 }
 
 func (s *Server) handleMessage(data []byte) *JSONRPCResponse {

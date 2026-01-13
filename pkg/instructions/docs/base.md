@@ -104,14 +104,6 @@ If `GITLAB_DEFAULT_NAMESPACE` is configured, many tools will automatically scope
 3. create_merge_request(project_id, source_branch="feature-xyz", target_branch="main", title="...")
 ```
 
-### 5. Pipeline Investigation
-
-```
-1. list_pipelines(project_id, status="failed") - Find failed pipelines
-2. list_pipeline_jobs(project_id, pipeline_id, scope=["failed"]) - Find failed jobs
-3. get_pipeline_job_output(project_id, job_id, extract="errors") - Get error details
-```
-
 ## Pagination Best Practices
 
 - Default `per_page` is 20 items (max 100)

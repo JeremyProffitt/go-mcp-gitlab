@@ -39,12 +39,17 @@ type Logger interface {
 	LogHTTPError(context string, req *HTTPRequestInfo, resp *HTTPResponseInfo, err error, secrets ...string)
 }
 
+// TokenProvider is a function that returns the current token to use.
+// This allows for dynamic token resolution (e.g., from request headers).
+type TokenProvider func() string
+
 // Client is an HTTP client wrapper for the GitLab API.
 type Client struct {
-	baseURL    string
-	token      string
-	httpClient *http.Client
-	logger     Logger
+	baseURL       string
+	token         string
+	tokenProvider TokenProvider
+	httpClient    *http.Client
+	logger        Logger
 }
 
 // ClientOption is a function that configures a Client.
@@ -61,6 +66,14 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 func WithLogger(logger Logger) ClientOption {
 	return func(c *Client) {
 		c.logger = logger
+	}
+}
+
+// WithTokenProvider sets a dynamic token provider.
+// The provider is called for each request to get the current token.
+func WithTokenProvider(provider TokenProvider) ClientOption {
+	return func(c *Client) {
+		c.tokenProvider = provider
 	}
 }
 
@@ -88,6 +101,18 @@ func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 	}
 
 	return c
+}
+
+// getToken returns the current token to use for requests.
+// If a TokenProvider is set and returns a non-empty token, it is used.
+// Otherwise, the default token is used.
+func (c *Client) getToken() string {
+	if c.tokenProvider != nil {
+		if token := c.tokenProvider(); token != "" {
+			return token
+		}
+	}
+	return c.token
 }
 
 // Get performs an HTTP GET request to the specified endpoint.
@@ -123,6 +148,9 @@ func (c *Client) GetText(endpoint string) (string, error) {
 	// Build the full URL
 	url := c.buildURL(endpoint)
 
+	// Get the effective token for this request
+	token := c.getToken()
+
 	// Create the request
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -130,7 +158,7 @@ func (c *Client) GetText(endpoint string) (string, error) {
 	}
 
 	// Set headers
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "text/plain")
 
 	// Log request at DEBUG level (token will be masked)
@@ -138,10 +166,10 @@ func (c *Client) GetText(endpoint string) (string, error) {
 		Method: http.MethodGet,
 		URL:    url,
 		Headers: map[string]string{
-			"Authorization": "Bearer " + c.token,
+			"Authorization": "Bearer " + token,
 			"Accept":        "text/plain",
 		},
-	}, c.token)
+	}, token)
 
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
@@ -150,10 +178,10 @@ func (c *Client) GetText(endpoint string) (string, error) {
 			Method: http.MethodGet,
 			URL:    url,
 			Headers: map[string]string{
-				"Authorization": "Bearer " + c.token,
+				"Authorization": "Bearer " + token,
 				"Accept":        "text/plain",
 			},
-		}, nil, err, c.token)
+		}, nil, err, token)
 		c.logger.Error("request failed", "method", http.MethodGet, "endpoint", endpoint, "error", err)
 		return "", fmt.Errorf("request failed: %w", err)
 	}
@@ -172,7 +200,7 @@ func (c *Client) GetText(endpoint string) (string, error) {
 		StatusCode: resp.StatusCode,
 		Headers:    convertHeaders(resp.Header),
 		Body:       string(respBody),
-	}, duration, c.token)
+	}, duration, token)
 
 	c.logger.Access(http.MethodGet, endpoint, resp.StatusCode, duration)
 
@@ -185,7 +213,7 @@ func (c *Client) GetText(endpoint string) (string, error) {
 			StatusCode: resp.StatusCode,
 			Headers:    convertHeaders(resp.Header),
 			Body:       string(respBody),
-		}, nil, c.token)
+		}, nil, token)
 		return "", c.handleErrorResponse(resp.StatusCode, endpoint, respBody)
 	}
 
@@ -204,6 +232,9 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 
 	// Build the full URL
 	url := c.buildURL(endpoint)
+
+	// Get the effective token for this request
+	token := c.getToken()
 
 	// Prepare the request body
 	var bodyReader io.Reader
@@ -224,7 +255,7 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 	}
 
 	// Set headers
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
@@ -233,12 +264,12 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 		Method: method,
 		URL:    url,
 		Headers: map[string]string{
-			"Authorization": "Bearer " + c.token,
+			"Authorization": "Bearer " + token,
 			"Content-Type":  "application/json",
 			"Accept":        "application/json",
 		},
 		Body: bodyStr,
-	}, c.token)
+	}, token)
 
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
@@ -247,11 +278,11 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 			Method: method,
 			URL:    url,
 			Headers: map[string]string{
-				"Authorization": "Bearer " + c.token,
+				"Authorization": "Bearer " + token,
 				"Content-Type":  "application/json",
 			},
 			Body: bodyStr,
-		}, nil, err, c.token)
+		}, nil, err, token)
 		c.logger.Error("request failed", "method", method, "endpoint", endpoint, "error", err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -270,7 +301,7 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 		StatusCode: resp.StatusCode,
 		Headers:    convertHeaders(resp.Header),
 		Body:       string(respBody),
-	}, duration, c.token)
+	}, duration, token)
 
 	c.logger.Access(method, endpoint, resp.StatusCode, duration)
 
@@ -284,7 +315,7 @@ func (c *Client) requestWithPagination(method, endpoint string, body interface{}
 			StatusCode: resp.StatusCode,
 			Headers:    convertHeaders(resp.Header),
 			Body:       string(respBody),
-		}, nil, c.token)
+		}, nil, token)
 		return nil, c.handleErrorResponse(resp.StatusCode, endpoint, respBody)
 	}
 

@@ -44,10 +44,39 @@ go-mcp-gitlab [options]
 
 | Option | Environment Variable | Default | Description |
 |--------|---------------------|---------|-------------|
+| `--http` | - | `false` | Run in HTTP mode (for containers/Lambda) |
+| `--host` | - | `127.0.0.1` | HTTP server host |
+| `--port`, `-p` | - | `3000` | HTTP server port |
 | `-log-dir` | `MCP_LOG_DIR` | `~/go-mcp-gitlab/logs` | Directory for log files |
 | `-log-level` | `MCP_LOG_LEVEL` | `info` | Log level: off\|error\|warn\|info\|access\|debug |
 | `-version` | - | - | Show version information |
 | `-help` | - | - | Show help message |
+
+### Running Modes
+
+**Stdio Mode (Default)** - For local MCP clients:
+```bash
+./go-mcp-gitlab
+```
+
+**HTTP Mode** - For containers, Lambda, or remote access:
+```bash
+./go-mcp-gitlab --http --host 0.0.0.0 --port 3000
+```
+
+### HTTP Mode Details
+
+When running in HTTP mode, the server exposes:
+- `POST /` - MCP JSON-RPC endpoint
+- `GET /health` - Health check endpoint (returns `{"status":"ok","version":"X.X.X"}`)
+
+**Authentication**: HTTP mode requires an `Authorization` header on all requests (except `/health`). The authorization layer is pluggable; by default it accepts any token.
+
+**Per-Request Credentials**: In HTTP mode, GitLab tokens can be passed via headers instead of environment variables, enabling multi-user scenarios:
+
+| Header | Description |
+|--------|-------------|
+| `X-GitLab-Token` | GitLab personal access token (overrides `GITLAB_PERSONAL_ACCESS_TOKEN`) |
 
 ### Environment Variables
 

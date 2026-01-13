@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/auth"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/config"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/gitlab"
 	"github.com/go-mcp-gitlab/go-mcp-gitlab/pkg/instructions"
@@ -162,9 +163,19 @@ func main() {
 		logging.ConfigValue{Value: logging.MaskToken(cfg.GitLabToken), Source: convertSource(cfg.Sources["GitLabToken"])},
 	))
 
-	// Create GitLab client with logger adapter
+	// Create GitLab client with logger adapter and token provider
+	// The token provider allows per-request token override via X-GitLab-Token header
 	logAdapter := &gitlabLoggerAdapter{logger: logger}
-	gitlabClient := gitlab.NewClient(cfg.GitLabAPIURL, cfg.GitLabToken, gitlab.WithLogger(logAdapter))
+	tokenProvider := func() string {
+		// Check if there's a per-request token set (from X-GitLab-Token header)
+		return auth.GetCurrentGitLabToken()
+	}
+	gitlabClient := gitlab.NewClient(
+		cfg.GitLabAPIURL,
+		cfg.GitLabToken,
+		gitlab.WithLogger(logAdapter),
+		gitlab.WithTokenProvider(tokenProvider),
+	)
 	logger.Info("GitLab client initialized: url=%s token_source=%s", cfg.GitLabAPIURL, cfg.TokenSource)
 
 	// Set up the tools context
